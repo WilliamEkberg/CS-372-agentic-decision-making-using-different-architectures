@@ -1,0 +1,17 @@
+
+=== Experiment Run: 2025-05-31 00:24:19 ===
+--- Final Results (Scored by best move among competitors) ---
+  Method: SingleAgent
+    Total Points (achieved best relative eval): 1 out of 1 FENs where method produced output
+    Percentage of Best Relative Moves: 100.00%
+    Illegal/Malformed Moves Proposed: 0
+  Method: TwoAgentDebate-o4-mini
+    Total Points (achieved best relative eval): 1 out of 1 FENs where method produced output
+    Percentage of Best Relative Moves: 100.00%
+    Illegal/Malformed Moves Proposed: 0
+  Method: ManagerAnalysts-o4-mini_mgr-o4-mini_ana
+    Total Points (achieved best relative eval): 0 out of 1 FENs where method produced output
+    Percentage of Best Relative Moves: 0.00%
+    Illegal/Malformed Moves Proposed: 0
+--- End of Experiment Run: 2025-05-31 00:24:19 ---
+

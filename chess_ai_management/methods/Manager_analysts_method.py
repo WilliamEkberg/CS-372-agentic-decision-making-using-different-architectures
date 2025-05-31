@@ -108,7 +108,7 @@ class ManagerAnalystsMethod:
                 model=self.analyst_model_name, 
                 messages=messages,
                 #temperature=0.3,
-                max_tokens=500
+                #max_tokens=500
             )
             return completion.choices[0].message.content
         except Exception as e:
@@ -180,7 +180,7 @@ class ManagerAnalystsMethod:
         )
         manager_history.append({"role": "user", "content": initial_prompt_for_manager})
 
-        MAX_ITERATIONS = 3 # Prevent infinite loops
+        MAX_ITERATIONS = 5 # Prevent infinite loops
         for i in range(MAX_ITERATIONS):
             print(f"\n  Manager Iteration {i + 1}/{MAX_ITERATIONS}")
             

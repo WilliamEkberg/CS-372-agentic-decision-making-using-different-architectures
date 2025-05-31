@@ -1,8 +1,8 @@
-
 from openai import OpenAI
 import os
 import sys
 import chess
+import datetime # For timestamping results file entries
 
 from config import OPENAI_API_KEY, STOCKFISH_PATH 
 
@@ -12,6 +12,7 @@ from methods.single_agent_method import SingleAgentMethod
 from methods.two_agent_debate_method import TwoAgentDebateMethod
 from methods.Manager_analysts_method import ManagerAnalystsMethod
 
+FINAL_RESULTS_FILENAME = "final_summary_results.txt"
 
 def run_experiment(max_fens_to_test: int = None):
     """
@@ -73,24 +74,26 @@ def run_experiment(max_fens_to_test: int = None):
 
     # 3. Initialize AI Methods
     methods_to_test = []
+    The_model_name = "o4-mini"
+    #The_model_name = "gpt-4.1"
     try:
-        single_agent = SingleAgentMethod(openai_client=openai_client, agent_model_name="gpt-4.1")
+        single_agent = SingleAgentMethod(openai_client=openai_client, agent_model_name=The_model_name)
         methods_to_test.append({"name": "SingleAgent", "method_obj": single_agent, "total_score": 0, "fens_processed_count": 0, "illegal_move_count": 0})
     except Exception as e:
         print(f"Error initializing SingleAgentMethod: {e}")
 
     try:
-        debate_method = TwoAgentDebateMethod(openai_client=openai_client, model_name="gpt-4.1")
-        methods_to_test.append({"name": "TwoAgentDebate-GPT4.1", "method_obj": debate_method, "total_score": 0, "fens_processed_count": 0, "illegal_move_count": 0})
+        debate_method = TwoAgentDebateMethod(openai_client=openai_client, model_name=The_model_name)
+        methods_to_test.append({"name": f"TwoAgentDebate-{The_model_name}", "method_obj": debate_method, "total_score": 0, "fens_processed_count": 0, "illegal_move_count": 0})
     except Exception as e:
         print(f"Error initializing TwoAgentDebateMethod: {e}")
 
     try:
         manager_analyst_method = ManagerAnalystsMethod(openai_client=openai_client, 
-                                                     manager_model="gpt-4.1", 
-                                                     analyst_model="gpt-4.1")
+                                                     manager_model=The_model_name, 
+                                                     analyst_model=The_model_name)
         methods_to_test.append({
-            "name": "ManagerAnalysts-GPT4.1_mgr-GPT4.1_ana", 
+            "name": f"ManagerAnalysts-{The_model_name}_mgr-{The_model_name}_ana", 
             "method_obj": manager_analyst_method, 
             "total_score": 0, 
             "fens_processed_count": 0,
@@ -156,29 +159,55 @@ def run_experiment(max_fens_to_test: int = None):
                     
                     if eval_dict:
                         any_method_produced_evaluable_move = True
-                        score = 0.0
+                        score = 0.0 # This will be White's POV score
                         MATE_VALUE_SCALE = 100000.0 
                         
+                        # eval_dict is from perspective of player whose turn it is in new_fen.
+                        # If White made the original move (`is_white_turn_for_fen == True`), then in `new_fen` it's Black's turn.
+                        # If Black made the original move (`is_white_turn_for_fen == False`), then in `new_fen` it's White's turn.
+
                         if eval_dict["type"] == "mate":
-                            mate_in_moves = eval_dict["value"]
-                            if mate_in_moves == 0:
-                                score = MATE_VALUE_SCALE if is_white_turn_for_fen else -MATE_VALUE_SCALE
-                            elif mate_in_moves > 0:
-                                score = -MATE_VALUE_SCALE + mate_in_moves if is_white_turn_for_fen else MATE_VALUE_SCALE - mate_in_moves
-                            else:
-                                score = MATE_VALUE_SCALE - abs(mate_in_moves) if is_white_turn_for_fen else -MATE_VALUE_SCALE + abs(mate_in_moves)
+                            mate_value_for_new_player = eval_dict["value"] # This value is for the player whose turn it is in new_fen
+
+                            if is_white_turn_for_fen: 
+                                # White made the original move; Black is to play in new_fen.
+                                # mate_value_for_new_player is for Black.
+                                if mate_value_for_new_player == 0: # Black is checkmated now (by White's last move)
+                                    score = MATE_VALUE_SCALE    # Max positive for White
+                                elif mate_value_for_new_player > 0: # Black (in new_fen) can mate White in X moves
+                                    score = -MATE_VALUE_SCALE + mate_value_for_new_player # Very bad for White
+                                else: # mate_value_for_new_player < 0 => Black (in new_fen) IS MATED by White in X moves
+                                    score = MATE_VALUE_SCALE - abs(mate_value_for_new_player) # Very good for White
+                            else: 
+                                # Black made the original move; White is to play in new_fen.
+                                # mate_value_for_new_player is for White.
+                                if mate_value_for_new_player == 0: # White is checkmated now (by Black's last move)
+                                    score = -MATE_VALUE_SCALE   # Max negative for White
+                                elif mate_value_for_new_player > 0: # White (in new_fen) can mate Black in X moves
+                                    score = MATE_VALUE_SCALE - mate_value_for_new_player # Very good for White
+                                else: # mate_value_for_new_player < 0 => White (in new_fen) IS MATED by Black in X moves
+                                    score = -MATE_VALUE_SCALE + abs(mate_value_for_new_player) # Very bad for White
+                        
                         elif eval_dict["type"] == "cp":
-                            score = float(eval_dict["value"])
+                            cp_value_from_stockfish = float(eval_dict["value"])
+                            # cp_value_from_stockfish is from the POV of whose turn it is in new_fen.
+                            
+                            if is_white_turn_for_fen: 
+                                # White made the original move. In new_fen, it's Black's turn.
+                                # So, cp_value_from_stockfish is Black's advantage.
+                                # To get White's POV, we negate it.
+                                score = -cp_value_from_stockfish 
+                            else: 
+                                # Black made the original move. In new_fen, it's White's turn.
+                                # So, cp_value_from_stockfish is already White's advantage.
+                                score = cp_value_from_stockfish
                         
                         current_fen_agent_eval_scores[method_name] = score
                         print(f"    {method_name} move {agent_move_uci} -> eval score (White's POV): {score:.2f} (raw: {eval_dict})")
                     else:
                         print(f"    Warning: Could not evaluate move '{agent_move_uci}' by {method_name}. Considered worst.")
                         current_fen_agent_eval_scores[method_name] = -float('inf') if is_white_turn_for_fen else float('inf')
-                        agent_info["illegal_move_count"] += 1
                 else:
-                    print(f"    {method_name} did not produce a valid move string for evaluation (Proposed: {agent_move_uci}). Considered worst.")
-                    current_fen_agent_eval_scores[method_name] = -float('inf') if is_white_turn_for_fen else float('inf')
                     print(f"    {method_name} did not produce a valid move string for evaluation (Proposed: {agent_move_uci}). Considered worst.")
                     current_fen_agent_eval_scores[method_name] = -float('inf') if is_white_turn_for_fen else float('inf')
 
@@ -212,28 +241,56 @@ def run_experiment(max_fens_to_test: int = None):
             print(f"  No method produced moves for evaluation for FEN {fen}. No competitive points awarded.")
 
 
-    # 5. Aggregate and Print Results   
-    print("\n--- Experiment Finished ---")
-    print("\n--- Final Results (Scored by best move among competitors) ---")
+    # 5. Aggregate and Collect Results for File and Console 
+    print("\n--- Experiment Finished ---") # Console only
+    print("\n--- Final Results (Scored by best move among competitors) ---") # Console only
+
+    final_results_lines = [] # List to hold lines for the results file
+    timestamp = datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+    final_results_lines.append(f"\n=== Experiment Run: {timestamp} ===")
+    final_results_lines.append("--- Final Results (Scored by best move among competitors) ---")
 
     if not any(agent_info["fens_processed_count"] > 0 for agent_info in methods_to_test):
-        print("No FENs were processed by any method for scoring.")
-        return
+        no_fens_message = "No FENs were processed by any method for scoring."
+        print(no_fens_message) # Console
+        final_results_lines.append(no_fens_message) # File
+    else:
+        for agent_info in methods_to_test:
+            method_name = agent_info["name"]
+            score = agent_info["total_score"]
+            fens_processed_for_method = agent_info["fens_processed_count"]
+            illegal_moves = agent_info["illegal_move_count"]
+            
+            # Lines for console
+            print(f"  Method: {method_name}")
+            if fens_processed_for_method > 0:
+                percentage_best_moves = (score / fens_processed_for_method) * 100
+                print(f"    Total Points (achieved best relative eval): {score} out of {fens_processed_for_method} FENs where method produced output")
+                print(f"    Percentage of Best Relative Moves: {percentage_best_moves:.2f}%")
+                print(f"    Illegal/Malformed Moves Proposed: {illegal_moves}")
+            else:
+                print(f"    No FENs were processed/attempted by this method.")
 
-    for agent_info in methods_to_test:
-        method_name = agent_info["name"]
-        score = agent_info["total_score"]
-        fens_processed_for_method = agent_info["fens_processed_count"]
-        
-        if fens_processed_for_method > 0:
-            percentage_best_moves = (score / fens_processed_for_method) * 100
-            print(f"  Method: {method_name}")
-            print(f"    Total Points (achieved best relative eval): {score} out of {fens_processed_for_method} FENs where method produced output")
-            print(f"    Percentage of Best Relative Moves: {percentage_best_moves:.2f}%")
-            print(f"    Illegal/Malformed Moves Proposed: {agent_info['illegal_move_count']}")
-        else:
-            print(f"  Method: {method_name}")
-            print(f"    No FENs were processed/attempted by this method.")
+            # Lines for file
+            final_results_lines.append(f"  Method: {method_name}")
+            if fens_processed_for_method > 0:
+                percentage_best_moves = (score / fens_processed_for_method) * 100
+                final_results_lines.append(f"    Total Points (achieved best relative eval): {score} out of {fens_processed_for_method} FENs where method produced output")
+                final_results_lines.append(f"    Percentage of Best Relative Moves: {percentage_best_moves:.2f}%")
+                final_results_lines.append(f"    Illegal/Malformed Moves Proposed: {illegal_moves}")
+            else:
+                final_results_lines.append(f"    No FENs were processed/attempted by this method.")
+    
+    final_results_lines.append(f"--- End of Experiment Run: {timestamp} ---\n")
+
+    # Write collected results to the file
+    try:
+        with open(FINAL_RESULTS_FILENAME, 'a', encoding='utf-8') as f_out:
+            for line in final_results_lines:
+                f_out.write(line + "\n")
+        print(f"\nFinal summary results also written to {FINAL_RESULTS_FILENAME}")
+    except Exception as e:
+        print(f"\nError writing final summary results to file: {e}")
 
 if __name__ == "__main__":
     # Basic pre-checks for config, actual error handling is in initializations
@@ -243,5 +300,5 @@ if __name__ == "__main__":
     if not STOCKFISH_PATH:
         print("CRITICAL INFO: STOCKFISH_PATH is not set in config.py. Evaluation will fail if not found elsewhere.")
 
-    run_experiment(max_fens_to_test=1) 
-    #run_experiment() 
+    #run_experiment(max_fens_to_test=1) 
+    run_experiment() 

@@ -132,30 +132,27 @@ class TwoAgentDebateMethod:
             debate_transcript.append({"round": i, "speaker": "Beta", "text": latest_beta_statement})
             print(f"Beta (Round {i}):\n{latest_beta_statement}")
 
-        # Post-Debate Move Determination
+        # --- Post-Debate Move Determination ---
+        # Simple strategy: Try to extract move from Beta's final statement (or Alpha's if Beta fails)
         final_move_uci = self._extract_uci_move(latest_beta_statement)
         if not final_move_uci:
             final_move_uci = self._extract_uci_move(latest_alpha_statement)
         
         if final_move_uci:
-            print(f"\n--- Debate Concluded. Final Proposed Move: {final_move_uci} ---")
+            # Changed print message slightly to indicate it's pre-external-validation
+            print(f"\n--- Debate Concluded. Extracted Final Proposed Move: {final_move_uci} ---")
         else:
             print(f"\n--- Debate Concluded. Could not reliably extract a final UCI move. ---")
-            print(f"Alpha's final statement: {latest_alpha_statement}")
-            print(f"Beta's final statement: {latest_beta_statement}")
+            # Only print these if no move was extracted at all, to reduce noise if a move WAS extracted but might fail later
+            # This check is now redundant if the print above already confirmed final_move_uci is None, but harmless.
+            if not final_move_uci: 
+                print(f"Alpha's final statement: {latest_alpha_statement}")
+                print(f"Beta's final statement: {latest_beta_statement}")
 
-        if not final_move_uci:
-            return None, debate_transcript
-
-        try:
-            board = chess.Board(fen_position)
-            move_obj = chess.Move.from_uci(final_move_uci)
-            if move_obj not in board.legal_moves:
-                print(f"  Info (TwoAgentDebateMethod): Extracted move '{final_move_uci}' is ILLEGAL for FEN '{fen_position}'.")
-                return None, debate_transcript
-        except ValueError:
-            print(f"  Info (TwoAgentDebateMethod): Extracted string '{final_move_uci}' is not valid UCI format.")
-            return None, debate_transcript
+        # The python-chess validation block that was previously here has been removed.
+        # The extracted final_move_uci (which could be None, or an invalid/illegal move)
+        # will be returned directly.
+        # main.py's Evaluator will be the first point of rigorous legality checking.
 
         return final_move_uci, debate_transcript
 

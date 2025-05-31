@@ -1,0 +1,17 @@
+
+--- Experiment Run: 2025-05-30 23:50:35 ---
+--- Starting Chess AI Experiment --- 
+Loaded 1 FENs for the experiment (limited to first 1).
+Warning: OPENAI_API_KEY not configured in config.py or is placeholder. 
+OpenAI dependent methods may fail if key not in environment.
+OpenAI client initialized (likely from environment variable).
+Stockfish Evaluator initialized successfully.
+
+Initialized 3 AI method(s) for testing.
+
+--- Processing FEN 1/1: r4rk1/1p1nbppp/pq3n2/3p1N2/3P1B2/2N5/PPP1QPPP/R3R1K1 b - - 0 1 ---
+  Running method: SingleAgent...
+    SingleAgent proposed: e7b4
+    SingleAgent move e7b4 -> eval score (White's POV): 222.00 (raw: {'type': 'cp', 'value': 222})
+  Running method: TwoAgentDebate-o4-mini...
+--- End of Experiment Run: 2025-05-30 23:50:35 ---

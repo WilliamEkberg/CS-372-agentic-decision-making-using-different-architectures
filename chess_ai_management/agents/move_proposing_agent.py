@@ -1,6 +1,8 @@
 from openai import OpenAI # For type hinting, client is passed in
 import json # Needed to parse the tool call arguments
 
+
+
 class MoveProposingAgent:
     """
     A chess agent that uses the OpenAI API with a simple JSON schema (tool calling)
